@@ -1,0 +1,770 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile tied to Google Sign-In UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified user email.",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Optional profile avatar URL.",
+          "maxLength": 1024
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of account creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update."
+        }
+      },
+      "required": ["uid", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "SavedWorkspace": {
+      "title": "SavedWorkspace",
+      "description": "Saved curation pipeline configuration snapshot owned by a user.",
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "description": "Document ID of the saved workspace.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the owning user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for the saved curation snapshot.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "presetId": {
+          "type": "string",
+          "description": "Preset identifier or custom_csv.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "datasetName": {
+          "type": "string",
+          "description": "Name of the dataset associated with this snapshot.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional curation notes.",
+          "maxLength": 500
+        },
+        "globalConfig": {
+          "type": "object",
+          "description": "Global split ratios and hash salt."
+        },
+        "regConfig": {
+          "type": "object",
+          "description": "Regression pipeline configuration."
+        },
+        "seqConfig": {
+          "type": "object",
+          "description": "Sequential tensor pipeline configuration."
+        },
+        "mdpConfig": {
+          "type": "object",
+          "description": "Offline RL MDP configuration."
+        },
+        "summaryStats": {
+          "type": "object",
+          "description": "Snapshot metrics at save time including regRows, tensorShape, transitions, highCollinearityCount, regRSquared, seqRSquared, valLoss, trainLoss, and regRmse."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of snapshot creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of snapshot update."
+        }
+      },
+      "required": [
+        "workspaceId",
+        "ownerId",
+        "name",
+        "presetId",
+        "datasetName",
+        "globalConfig",
+        "regConfig",
+        "seqConfig",
+        "mdpConfig",
+        "summaryStats",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "Persistent Gemini assistant conversation thread.",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "description": "Chat session document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the owning user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Conversation title.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["curation_architect", "regression_analyst", "rl_specialist"],
+          "description": "System instruction persona role."
+        },
+        "model": {
+          "type": "string",
+          "enum": ["gemini-4-hydrogen", "gemini-3.1-flash-lite"],
+          "description": "Selected Gemini model alias."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of session creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last message."
+        }
+      },
+      "required": [
+        "sessionId",
+        "ownerId",
+        "title",
+        "role",
+        "model",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual turn inside a Gemini assistant chat session.",
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "description": "Message document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Parent chat session ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the owning user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sender": {
+          "type": "string",
+          "enum": ["user", "assistant"],
+          "description": "Author of the message."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message markdown or plain text content.",
+          "minLength": 1,
+          "maxLength": 16000
+        },
+        "model": {
+          "type": "string",
+          "description": "Model used to generate assistant response.",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of message creation."
+        }
+      },
+      "required": [
+        "messageId",
+        "sessionId",
+        "ownerId",
+        "sender",
+        "text",
+        "createdAt"
+      ]
+    },
+    "WorkflowTemplate": {
+      "title": "WorkflowTemplate",
+      "description": "Reusable multi-paradigm workflow configuration template (Regression + Sequence + Offline RL) tailored to an industry vertical.",
+      "type": "object",
+      "properties": {
+        "templateId": {
+          "type": "string",
+          "description": "Document ID of the workflow template.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the owning user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Template display name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "vertical": {
+          "type": "string",
+          "enum": [
+            "E-Commerce Retail",
+            "B2B SaaS",
+            "Consumer Fintech",
+            "Industrial IoT & RUL",
+            "Custom Vertical"
+          ],
+          "description": "Target industry vertical."
+        },
+        "description": {
+          "type": "string",
+          "description": "Multi-paradigm configuration rationale and vertical summary.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "recommendedPresetId": {
+          "type": "string",
+          "description": "Associated dataset preset ID or custom_csv.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "globalConfig": {
+          "type": "object",
+          "description": "Global split ratios and hash salt."
+        },
+        "regConfig": {
+          "type": "object",
+          "description": "Regression pipeline configuration."
+        },
+        "seqConfig": {
+          "type": "object",
+          "description": "Sequence Transformer pipeline configuration."
+        },
+        "mdpConfig": {
+          "type": "object",
+          "description": "Offline RL MDP configuration."
+        },
+        "rulConfig": {
+          "type": "object",
+          "description": "Optional Time-Series & RUL sliding-window configuration."
+        },
+        "appliedCurationRules": {
+          "type": "array",
+          "description": "Bounded list of applied curation rule IDs."
+        },
+        "enabledEngineeredFeatures": {
+          "type": "array",
+          "description": "Bounded list of enabled engineered feature IDs."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of template creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last template update."
+        }
+      },
+      "required": [
+        "templateId",
+        "ownerId",
+        "name",
+        "vertical",
+        "description",
+        "recommendedPresetId",
+        "globalConfig",
+        "regConfig",
+        "seqConfig",
+        "mdpConfig",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GovernanceRecord": {
+      "title": "GovernanceRecord",
+      "description": "Standardized dataset metadata manifest and governance policy record.",
+      "type": "object",
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "description": "Document ID of the governance record.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the owning user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "datasetId": {
+          "type": "string",
+          "description": "Dataset preset or custom dataset identifier.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "datasetName": {
+          "type": "string",
+          "description": "Human-readable dataset name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "standard": {
+          "type": "string",
+          "enum": ["DCAT-3", "ML-Croissant", "ISO-11179"],
+          "description": "Adopted metadata standardization specification."
+        },
+        "steward": {
+          "type": "string",
+          "description": "Assigned data steward or owner team.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "domain": {
+          "type": "string",
+          "description": "Business or telemetry domain.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "classification": {
+          "type": "string",
+          "enum": ["Public", "Internal", "Confidential", "Restricted-PII"],
+          "description": "Data sensitivity classification."
+        },
+        "retentionPolicy": {
+          "type": "string",
+          "enum": ["Hot-90d", "Warm-1y", "Cold-3y", "WORM-7y"],
+          "description": "Lifecycle archival retention policy."
+        },
+        "license": {
+          "type": "string",
+          "description": "Usage and redistribution license identifier.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "description": "Standardized dataset abstract and provenance notes.",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "keywords": {
+          "type": "array",
+          "description": "Bounded list of catalog taxonomy tags."
+        },
+        "complianceScore": {
+          "type": "number",
+          "description": "Computed metadata compliance score (0-100)."
+        },
+        "policyFlags": {
+          "type": "object",
+          "description": "Active governance policy switches."
+        },
+        "standardizedFieldsCount": {
+          "type": "number",
+          "description": "Count of verified schema columns."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of record creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last record update."
+        }
+      },
+      "required": [
+        "recordId",
+        "ownerId",
+        "datasetId",
+        "datasetName",
+        "standard",
+        "steward",
+        "domain",
+        "classification",
+        "retentionPolicy",
+        "license",
+        "description",
+        "complianceScore",
+        "policyFlags",
+        "standardizedFieldsCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DatasetCommit": {
+      "title": "DatasetCommit",
+      "description": "Immutable dataset and curation pipeline version-control commit.",
+      "type": "object",
+      "properties": {
+        "commitId": {
+          "type": "string",
+          "description": "Document ID of the VCS commit.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the owning user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "commitHash": {
+          "type": "string",
+          "description": "Deterministic short SHA content hash.",
+          "minLength": 6,
+          "maxLength": 64
+        },
+        "parentHash": {
+          "type": "string",
+          "description": "Optional parent commit hash.",
+          "maxLength": 64
+        },
+        "branch": {
+          "type": "string",
+          "description": "VCS branch name.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "tag": {
+          "type": "string",
+          "description": "Optional semantic release tag.",
+          "maxLength": 64
+        },
+        "message": {
+          "type": "string",
+          "description": "Commit message.",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "author": {
+          "type": "string",
+          "description": "Commit author display name or email.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "datasetId": {
+          "type": "string",
+          "description": "Dataset identifier.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "datasetName": {
+          "type": "string",
+          "description": "Dataset display name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "datasetFingerprint": {
+          "type": "string",
+          "description": "Dataset structural fingerprint.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "eventCount": {
+          "type": "number",
+          "description": "Number of events in commit."
+        },
+        "entityCount": {
+          "type": "number",
+          "description": "Number of entities in commit."
+        },
+        "globalConfig": {
+          "type": "object",
+          "description": "Global split and salt settings."
+        },
+        "regConfig": {
+          "type": "object",
+          "description": "Regression configuration."
+        },
+        "seqConfig": {
+          "type": "object",
+          "description": "Sequence configuration."
+        },
+        "mdpConfig": {
+          "type": "object",
+          "description": "Offline RL MDP configuration."
+        },
+        "rulConfig": {
+          "type": "object",
+          "description": "Optional RUL configuration."
+        },
+        "appliedCurationRules": {
+          "type": "array",
+          "description": "Bounded list of applied curation rules."
+        },
+        "enabledEngineeredFeatures": {
+          "type": "array",
+          "description": "Bounded list of enabled engineered features."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of commit."
+        }
+      },
+      "required": [
+        "commitId",
+        "ownerId",
+        "commitHash",
+        "branch",
+        "message",
+        "author",
+        "datasetId",
+        "datasetName",
+        "datasetFingerprint",
+        "eventCount",
+        "entityCount",
+        "globalConfig",
+        "regConfig",
+        "seqConfig",
+        "mdpConfig",
+        "createdAt"
+      ]
+    },
+    "ArchiveBundle": {
+      "title": "ArchiveBundle",
+      "description": "Immutable repository archival bundle with SHA-256 integrity digest and storage tier.",
+      "type": "object",
+      "properties": {
+        "archiveId": {
+          "type": "string",
+          "description": "Document ID of the archived bundle.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the owning user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "archiveUrn": {
+          "type": "string",
+          "description": "Uniform resource name of archived bundle.",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "title": {
+          "type": "string",
+          "description": "Archival deposit title.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "datasetId": {
+          "type": "string",
+          "description": "Source dataset identifier.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "datasetName": {
+          "type": "string",
+          "description": "Source dataset name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "datasetFingerprint": {
+          "type": "string",
+          "description": "Structural dataset fingerprint.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sha256Digest": {
+          "type": "string",
+          "description": "SHA-256 content verification digest.",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "standard": {
+          "type": "string",
+          "enum": ["DCAT-3", "ML-Croissant", "ISO-11179"],
+          "description": "Metadata manifest format bundled in archive."
+        },
+        "storageTier": {
+          "type": "string",
+          "enum": ["Hot Registry", "Warm Object Store", "Cold WORM Glacier"],
+          "description": "Repository storage lifecycle tier."
+        },
+        "retentionWindow": {
+          "type": "string",
+          "enum": ["90 Days", "1 Year", "3 Years", "7 Years (WORM)"],
+          "description": "Minimum archival retention policy."
+        },
+        "retentionHold": {
+          "type": "boolean",
+          "description": "Whether legal or compliance retention lock is active."
+        },
+        "payloadSizeKb": {
+          "type": "number",
+          "description": "Serialized bundle footprint in kilobytes."
+        },
+        "artifactSummary": {
+          "type": "object",
+          "description": "Counts of archived rows, tensors, transitions, and RUL windows."
+        },
+        "snapshotConfigs": {
+          "type": "object",
+          "description": "Archived pipeline configuration snapshot."
+        },
+        "lastVerifiedIso": {
+          "type": "string",
+          "description": "Optional ISO timestamp of latest checksum verification.",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of archival deposit."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of archival metadata update."
+        }
+      },
+      "required": [
+        "archiveId",
+        "ownerId",
+        "archiveUrn",
+        "title",
+        "datasetId",
+        "datasetName",
+        "datasetFingerprint",
+        "sha256Digest",
+        "standard",
+        "storageTier",
+        "retentionWindow",
+        "retentionHold",
+        "payloadSizeKb",
+        "artifactSummary",
+        "snapshotConfigs",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Private authenticated user profile storing Google identity metadata."
+    },
+    "/users/{userId}/workspaces/{workspaceId}": {
+      "schema": {
+        "$ref": "#/entities/SavedWorkspace"
+      },
+      "description": "Saved curation pipeline configuration snapshots owned by the user."
+    },
+    "/users/{userId}/workflowTemplates/{templateId}": {
+      "schema": {
+        "$ref": "#/entities/WorkflowTemplate"
+      },
+      "description": "Saved industry vertical multi-paradigm workflow templates owned by the user."
+    },
+    "/users/{userId}/governanceRecords/{recordId}": {
+      "schema": {
+        "$ref": "#/entities/GovernanceRecord"
+      },
+      "description": "Standardized dataset metadata profiles and governance policy records owned by the user."
+    },
+    "/users/{userId}/vcsCommits/{commitId}": {
+      "schema": {
+        "$ref": "#/entities/DatasetCommit"
+      },
+      "description": "Immutable dataset and curation pipeline version-control commits owned by the user."
+    },
+    "/users/{userId}/archiveVaults/{archiveId}": {
+      "schema": {
+        "$ref": "#/entities/ArchiveBundle"
+      },
+      "description": "Archived dataset and metadata bundles with SHA-256 integrity digests owned by the user."
+    },
+    "/users/{userId}/chatSessions/{sessionId}": {
+      "schema": {
+        "$ref": "#/entities/ChatSession"
+      },
+      "description": "Multi-turn Gemini assistant chat sessions owned by the user."
+    },
+    "/users/{userId}/chatSessions/{sessionId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/ChatMessage"
+      },
+      "description": "Chronological messages belonging to a user's chat session."
+    }
+  }
+}

@@ -1,0 +1,747 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 120
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && (!data.keys().hasAny(['photoURL']) || (data.photoURL is string && data.photoURL.size() <= 1024))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWorkspace(data) {
+      return data.keys().hasAll([
+          'workspaceId',
+          'ownerId',
+          'name',
+          'presetId',
+          'datasetName',
+          'globalConfig',
+          'regConfig',
+          'seqConfig',
+          'mdpConfig',
+          'summaryStats',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'workspaceId',
+          'ownerId',
+          'name',
+          'presetId',
+          'datasetName',
+          'notes',
+          'globalConfig',
+          'regConfig',
+          'seqConfig',
+          'mdpConfig',
+          'summaryStats',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.workspaceId)
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 120
+        && data.presetId is string
+        && data.presetId.size() >= 1
+        && data.presetId.size() <= 64
+        && data.datasetName is string
+        && data.datasetName.size() >= 1
+        && data.datasetName.size() <= 120
+        && (!data.keys().hasAny(['notes']) || (data.notes is string && data.notes.size() <= 500))
+        && data.globalConfig is map
+        && data.regConfig is map
+        && data.seqConfig is map
+        && data.mdpConfig is map
+        && data.summaryStats is map
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatSession(data) {
+      return data.keys().hasAll([
+          'sessionId',
+          'ownerId',
+          'title',
+          'role',
+          'model',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'sessionId',
+          'ownerId',
+          'title',
+          'role',
+          'model',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.sessionId)
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 120
+        && data.role is string
+        && data.role in ['curation_architect', 'regression_analyst', 'rl_specialist']
+        && data.model is string
+        && data.model in ['gemini-4-hydrogen', 'gemini-3.1-flash-lite']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll([
+          'messageId',
+          'sessionId',
+          'ownerId',
+          'sender',
+          'text',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'messageId',
+          'sessionId',
+          'ownerId',
+          'sender',
+          'text',
+          'model',
+          'createdAt'
+        ])
+        && isValidId(data.messageId)
+        && isValidId(data.sessionId)
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.sender is string
+        && data.sender in ['user', 'assistant']
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 16000
+        && (!data.keys().hasAny(['model']) || (data.model is string && data.model.size() <= 64))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidWorkflowTemplate(data) {
+      return data.keys().hasAll([
+          'templateId',
+          'ownerId',
+          'name',
+          'vertical',
+          'description',
+          'recommendedPresetId',
+          'globalConfig',
+          'regConfig',
+          'seqConfig',
+          'mdpConfig',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'templateId',
+          'ownerId',
+          'name',
+          'vertical',
+          'description',
+          'recommendedPresetId',
+          'globalConfig',
+          'regConfig',
+          'seqConfig',
+          'mdpConfig',
+          'rulConfig',
+          'appliedCurationRules',
+          'enabledEngineeredFeatures',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.templateId)
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 120
+        && data.vertical is string
+        && data.vertical in ['E-Commerce Retail', 'B2B SaaS', 'Consumer Fintech', 'Industrial IoT & RUL', 'Custom Vertical']
+        && data.description is string
+        && data.description.size() >= 1
+        && data.description.size() <= 500
+        && data.recommendedPresetId is string
+        && data.recommendedPresetId.size() >= 1
+        && data.recommendedPresetId.size() <= 64
+        && data.globalConfig is map
+        && data.regConfig is map
+        && data.seqConfig is map
+        && data.mdpConfig is map
+        && (!data.keys().hasAny(['rulConfig']) || data.rulConfig is map)
+        && (!data.keys().hasAny(['appliedCurationRules']) || (
+          data.appliedCurationRules is list
+          && data.appliedCurationRules.size() <= 10
+          && (data.appliedCurationRules.size() == 0 || data.appliedCurationRules[0] is string)
+        ))
+        && (!data.keys().hasAny(['enabledEngineeredFeatures']) || (
+          data.enabledEngineeredFeatures is list
+          && data.enabledEngineeredFeatures.size() <= 10
+          && (data.enabledEngineeredFeatures.size() == 0 || data.enabledEngineeredFeatures[0] is string)
+        ))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidGovernanceRecord(data) {
+      return data.keys().hasAll([
+          'recordId',
+          'ownerId',
+          'datasetId',
+          'datasetName',
+          'standard',
+          'steward',
+          'domain',
+          'classification',
+          'retentionPolicy',
+          'license',
+          'description',
+          'complianceScore',
+          'policyFlags',
+          'standardizedFieldsCount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'recordId',
+          'ownerId',
+          'datasetId',
+          'datasetName',
+          'standard',
+          'steward',
+          'domain',
+          'classification',
+          'retentionPolicy',
+          'license',
+          'description',
+          'keywords',
+          'complianceScore',
+          'policyFlags',
+          'standardizedFieldsCount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.recordId)
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.datasetId is string && data.datasetId.size() >= 1 && data.datasetId.size() <= 120
+        && data.datasetName is string && data.datasetName.size() >= 1 && data.datasetName.size() <= 120
+        && data.standard is string && data.standard in ['DCAT-3', 'ML-Croissant', 'ISO-11179']
+        && data.steward is string && data.steward.size() >= 1 && data.steward.size() <= 120
+        && data.domain is string && data.domain.size() >= 1 && data.domain.size() <= 120
+        && data.classification is string && data.classification in ['Public', 'Internal', 'Confidential', 'Restricted-PII']
+        && data.retentionPolicy is string && data.retentionPolicy in ['Hot-90d', 'Warm-1y', 'Cold-3y', 'WORM-7y']
+        && data.license is string && data.license.size() >= 1 && data.license.size() <= 80
+        && data.description is string && data.description.size() >= 1 && data.description.size() <= 600
+        && (!data.keys().hasAny(['keywords']) || (
+          data.keywords is list
+          && data.keywords.size() <= 10
+          && (data.keywords.size() == 0 || data.keywords[0] is string)
+        ))
+        && (data.complianceScore is int || data.complianceScore is float)
+        && data.complianceScore >= 0 && data.complianceScore <= 100
+        && data.policyFlags is map
+        && (data.standardizedFieldsCount is int || data.standardizedFieldsCount is float)
+        && data.standardizedFieldsCount >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDatasetCommit(data) {
+      return data.keys().hasAll([
+          'commitId',
+          'ownerId',
+          'commitHash',
+          'branch',
+          'message',
+          'author',
+          'datasetId',
+          'datasetName',
+          'datasetFingerprint',
+          'eventCount',
+          'entityCount',
+          'globalConfig',
+          'regConfig',
+          'seqConfig',
+          'mdpConfig',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'commitId',
+          'ownerId',
+          'commitHash',
+          'parentHash',
+          'branch',
+          'tag',
+          'message',
+          'author',
+          'datasetId',
+          'datasetName',
+          'datasetFingerprint',
+          'eventCount',
+          'entityCount',
+          'globalConfig',
+          'regConfig',
+          'seqConfig',
+          'mdpConfig',
+          'rulConfig',
+          'appliedCurationRules',
+          'enabledEngineeredFeatures',
+          'createdAt'
+        ])
+        && isValidId(data.commitId)
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.commitHash is string && data.commitHash.size() >= 6 && data.commitHash.size() <= 64
+        && (!data.keys().hasAny(['parentHash']) || (data.parentHash is string && data.parentHash.size() <= 64))
+        && data.branch is string && data.branch.size() >= 1 && data.branch.size() <= 64
+        && (!data.keys().hasAny(['tag']) || (data.tag is string && data.tag.size() <= 64))
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 240
+        && data.author is string && data.author.size() >= 1 && data.author.size() <= 120
+        && data.datasetId is string && data.datasetId.size() >= 1 && data.datasetId.size() <= 120
+        && data.datasetName is string && data.datasetName.size() >= 1 && data.datasetName.size() <= 120
+        && data.datasetFingerprint is string && data.datasetFingerprint.size() >= 1 && data.datasetFingerprint.size() <= 128
+        && (data.eventCount is int || data.eventCount is float) && data.eventCount >= 0
+        && (data.entityCount is int || data.entityCount is float) && data.entityCount >= 0
+        && data.globalConfig is map
+        && data.regConfig is map
+        && data.seqConfig is map
+        && data.mdpConfig is map
+        && (!data.keys().hasAny(['rulConfig']) || data.rulConfig is map)
+        && (!data.keys().hasAny(['appliedCurationRules']) || (
+          data.appliedCurationRules is list
+          && data.appliedCurationRules.size() <= 10
+          && (data.appliedCurationRules.size() == 0 || data.appliedCurationRules[0] is string)
+        ))
+        && (!data.keys().hasAny(['enabledEngineeredFeatures']) || (
+          data.enabledEngineeredFeatures is list
+          && data.enabledEngineeredFeatures.size() <= 10
+          && (data.enabledEngineeredFeatures.size() == 0 || data.enabledEngineeredFeatures[0] is string)
+        ))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidArchiveBundle(data) {
+      return data.keys().hasAll([
+          'archiveId',
+          'ownerId',
+          'archiveUrn',
+          'title',
+          'datasetId',
+          'datasetName',
+          'datasetFingerprint',
+          'sha256Digest',
+          'standard',
+          'storageTier',
+          'retentionWindow',
+          'retentionHold',
+          'payloadSizeKb',
+          'artifactSummary',
+          'snapshotConfigs',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'archiveId',
+          'ownerId',
+          'archiveUrn',
+          'title',
+          'datasetId',
+          'datasetName',
+          'datasetFingerprint',
+          'sha256Digest',
+          'standard',
+          'storageTier',
+          'retentionWindow',
+          'retentionHold',
+          'payloadSizeKb',
+          'artifactSummary',
+          'snapshotConfigs',
+          'lastVerifiedIso',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.archiveId)
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && data.archiveUrn is string && data.archiveUrn.size() >= 1 && data.archiveUrn.size() <= 160
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.datasetId is string && data.datasetId.size() >= 1 && data.datasetId.size() <= 120
+        && data.datasetName is string && data.datasetName.size() >= 1 && data.datasetName.size() <= 120
+        && data.datasetFingerprint is string && data.datasetFingerprint.size() >= 1 && data.datasetFingerprint.size() <= 128
+        && data.sha256Digest is string && data.sha256Digest.size() >= 16 && data.sha256Digest.size() <= 128
+        && data.standard is string && data.standard in ['DCAT-3', 'ML-Croissant', 'ISO-11179']
+        && data.storageTier is string && data.storageTier in ['Hot Registry', 'Warm Object Store', 'Cold WORM Glacier']
+        && data.retentionWindow is string && data.retentionWindow in ['90 Days', '1 Year', '3 Years', '7 Years (WORM)']
+        && data.retentionHold is bool
+        && (data.payloadSizeKb is int || data.payloadSizeKb is float) && data.payloadSizeKb >= 0
+        && data.artifactSummary is map
+        && data.snapshotConfigs is map
+        && (!data.keys().hasAny(['lastVerifiedIso']) || (data.lastVerifiedIso is string && data.lastVerifiedIso.size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+      allow delete: if false;
+
+      match /workspaces/{workspaceId} {
+        allow get: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(workspaceId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isSignedIn()
+          && isOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(workspaceId)
+          && isOwner(userId)
+          && isValidWorkspace(incoming())
+          && incoming().workspaceId == workspaceId
+          && incoming().ownerId == userId
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(workspaceId)
+          && isOwner(userId)
+          && isValidWorkspace(incoming())
+          && incoming().workspaceId == existing().workspaceId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'notes', 'updatedAt'])
+            || incoming().diff(existing()).affectedKeys().hasOnly([
+              'name',
+              'presetId',
+              'datasetName',
+              'notes',
+              'globalConfig',
+              'regConfig',
+              'seqConfig',
+              'mdpConfig',
+              'summaryStats',
+              'updatedAt'
+            ])
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(workspaceId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      match /workflowTemplates/{templateId} {
+        allow get: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(templateId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isSignedIn()
+          && isOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(templateId)
+          && isOwner(userId)
+          && isValidWorkflowTemplate(incoming())
+          && incoming().templateId == templateId
+          && incoming().ownerId == userId
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(templateId)
+          && isOwner(userId)
+          && isValidWorkflowTemplate(incoming())
+          && incoming().templateId == existing().templateId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'vertical', 'description', 'updatedAt'])
+            || incoming().diff(existing()).affectedKeys().hasOnly([
+              'name',
+              'vertical',
+              'description',
+              'recommendedPresetId',
+              'globalConfig',
+              'regConfig',
+              'seqConfig',
+              'mdpConfig',
+              'rulConfig',
+              'appliedCurationRules',
+              'enabledEngineeredFeatures',
+              'updatedAt'
+            ])
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(templateId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      match /governanceRecords/{recordId} {
+        allow get: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(recordId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isSignedIn()
+          && isOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(recordId)
+          && isOwner(userId)
+          && isValidGovernanceRecord(incoming())
+          && incoming().recordId == recordId
+          && incoming().ownerId == userId
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(recordId)
+          && isOwner(userId)
+          && isValidGovernanceRecord(incoming())
+          && incoming().recordId == existing().recordId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'datasetName',
+            'standard',
+            'steward',
+            'domain',
+            'classification',
+            'retentionPolicy',
+            'license',
+            'description',
+            'keywords',
+            'complianceScore',
+            'policyFlags',
+            'standardizedFieldsCount',
+            'updatedAt'
+          ]);
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(recordId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      match /vcsCommits/{commitId} {
+        allow get: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(commitId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isSignedIn()
+          && isOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(commitId)
+          && isOwner(userId)
+          && isValidDatasetCommit(incoming())
+          && incoming().commitId == commitId
+          && incoming().ownerId == userId
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if false;
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(commitId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      match /archiveVaults/{archiveId} {
+        allow get: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(archiveId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isSignedIn()
+          && isOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(archiveId)
+          && isOwner(userId)
+          && isValidArchiveBundle(incoming())
+          && incoming().archiveId == archiveId
+          && incoming().ownerId == userId
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(archiveId)
+          && isOwner(userId)
+          && isValidArchiveBundle(incoming())
+          && incoming().archiveId == existing().archiveId
+          && incoming().ownerId == existing().ownerId
+          && incoming().sha256Digest == existing().sha256Digest
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'storageTier',
+            'retentionHold',
+            'lastVerifiedIso',
+            'updatedAt'
+          ]);
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(archiveId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+      }
+
+      match /chatSessions/{sessionId} {
+        allow get: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow list: if isSignedIn()
+          && isOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && isValidChatSession(incoming())
+          && incoming().sessionId == sessionId
+          && incoming().ownerId == userId
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && isValidChatSession(incoming())
+          && incoming().sessionId == existing().sessionId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt'])
+            || incoming().diff(existing()).affectedKeys().hasOnly(['title', 'updatedAt'])
+            || incoming().diff(existing()).affectedKeys().hasOnly(['role', 'model', 'updatedAt'])
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        match /messages/{messageId} {
+          allow get: if isSignedIn()
+            && isValidId(userId)
+            && isValidId(sessionId)
+            && isValidId(messageId)
+            && isOwner(userId)
+            && exists(/databases/$(database)/documents/users/$(userId)/chatSessions/$(sessionId));
+          allow list: if isSignedIn()
+            && isOwner(userId)
+            && resource.data.ownerId == request.auth.uid;
+          allow create: if isVerifiedUser()
+            && isValidId(userId)
+            && isValidId(sessionId)
+            && isValidId(messageId)
+            && isOwner(userId)
+            && isValidChatMessage(incoming())
+            && incoming().messageId == messageId
+            && incoming().sessionId == sessionId
+            && incoming().ownerId == userId
+            && incoming().createdAt == request.time
+            && get(/databases/$(database)/documents/users/$(userId)/chatSessions/$(sessionId)).data.ownerId == request.auth.uid;
+          allow update: if false;
+          allow delete: if isVerifiedUser()
+            && isValidId(userId)
+            && isValidId(sessionId)
+            && isValidId(messageId)
+            && isOwner(userId)
+            && exists(/databases/$(database)/documents/users/$(userId)/chatSessions/$(sessionId));
+        }
+      }
+    }
+  }
+}

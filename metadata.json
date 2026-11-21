@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Stratum",
+  "description": "Unified data curation framework for Traditional Regression (LTV), Deep Learning (Sequential Tensors), and Offline RL (CQL/MDP).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
