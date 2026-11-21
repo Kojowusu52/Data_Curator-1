@@ -59,6 +59,7 @@ import { DatasetSearchView } from './components/DatasetSearchView';
 import { AutoDocumentationView } from './components/AutoDocumentationView';
 import { AiCuratorView } from './components/AiCuratorView';
 import { NlQueryView } from './components/NlQueryView';
+import { PaperOrchestraView } from './components/PaperOrchestraView';
 import { RulTimeSeriesView } from './components/RulTimeSeriesView';
 import { FeatureEngineeringView } from './components/FeatureEngineeringView';
 import {
@@ -1415,6 +1416,8 @@ export default function App() {
               }}
             />
           )}
+
+          {activeTab === 'paper_orchestra' && <PaperOrchestraView />}
 
           {activeTab === 'ai_curator' && (
             <AiCuratorView

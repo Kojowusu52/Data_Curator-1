@@ -621,7 +621,9 @@ export async function parseMatFileBuffer(
   const endianB = bytes[127];
   const le = endianA === 0x49 && endianB === 0x4d; // 'IM' = little-endian
   if (!le && !(endianA === 0x4d && endianB === 0x49)) {
-    throw new Error('Unrecognized MAT-file endianness marker.');
+    throw new Error(
+      'This file is not a supported Level 4 or Level 5 MATLAB binary. If it is a delimited text file, import it as CSV.'
+    );
   }
 
   const variables: MatVariableSummary[] = [];

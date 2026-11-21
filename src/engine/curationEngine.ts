@@ -3385,123 +3385,193 @@ export function runCrossParadigmAudit(
   ];
 }
 
-export function parseCsvToEvents(csvText: string): {
+export interface CsvColumnMapping {
+  entity: number;
+  day: number;
+  spend: number;
+  actionId?: number;
+  actionLabel?: number;
+  channel?: number;
+  engagement?: number;
+  reward?: number;
+  propensity?: number;
+}
+
+function parseCsvRows(csvText: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    if (quoted) {
+      if (char === '"' && csvText[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+      continue;
+    }
+
+    if (char === '"' && field.length === 0) {
+      quoted = true;
+    } else if (char === ',') {
+      row.push(field.trim());
+      field = '';
+    } else if (char === '\n' || char === '\r') {
+      row.push(field.trim());
+      field = '';
+      if (row.some((value) => value.length > 0)) rows.push(row);
+      row = [];
+      if (char === '\r' && csvText[i + 1] === '\n') i++;
+    } else {
+      field += char;
+    }
+  }
+  row.push(field.trim());
+  if (row.some((value) => value.length > 0)) rows.push(row);
+  return rows;
+}
+
+export function getCsvHeaders(csvText: string): string[] {
+  const firstRow = parseCsvRows(csvText)[0] ?? [];
+  return firstRow.map((header) => header.replace(/^\uFEFF/, '').trim());
+}
+
+export function inferDefaultCsvMapping(headers: string[]): CsvColumnMapping {
+  const normalized = headers.map((header) =>
+    header.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  );
+  const find = (aliases: string[]) =>
+    normalized.findIndex((header) => aliases.includes(header));
+  const entity = find([
+    'entity_id', 'user_id', 'customer_id', 'entity', 'unit_id', 'asset_id',
+    'machine_id', 'engine_id', 'sensor_id', 'device_id',
+  ]);
+  const day = find([
+    'timestamp_day', 'day', 't', 'timestamp', 'cycle', 'time_cycles', 'step',
+    'cycle_idx',
+  ]);
+  const spend = find([
+    'spend_amount', 'spend', 'amount', 'revenue', 'vibration', 'vibration_rms',
+    'rms_vibration', 'sensor_value', 'sensor_reading', 'temperature',
+    'pressure', 'signal_value',
+  ]);
+  const actionId = find(['action_id', 'action', 'op_setting']);
+  const actionLabel = find([
+    'action_label', 'treatment', 'action_name', 'maintenance_action', 'regime',
+  ]);
+  const channel = find(['channel', 'source', 'sensor_channel', 'sensor_name', 'subsystem']);
+  const engagement = find([
+    'engagement_score', 'engagement', 'utilization', 'health_index', 'health',
+    'degradation_index',
+  ]);
+  const reward = find(['reward', 'margin', 'r', 'uptime_reward', 'rul_margin']);
+  const propensity = find(['propensity', 'mu', 'prob']);
+
+  return {
+    entity: entity >= 0 ? entity : 0,
+    day: day >= 0 ? day : Math.min(1, headers.length - 1),
+    spend: spend >= 0 ? spend : Math.min(2, headers.length - 1),
+    ...(actionId >= 0 ? { actionId } : {}),
+    ...(actionLabel >= 0 ? { actionLabel } : {}),
+    ...(channel >= 0 ? { channel } : {}),
+    ...(engagement >= 0 ? { engagement } : {}),
+    ...(reward >= 0 ? { reward } : {}),
+    ...(propensity >= 0 ? { propensity } : {}),
+  };
+}
+
+export function parseCsvToEvents(
+  csvText: string,
+  mappingOverride?: CsvColumnMapping
+): {
   events: RawEvent[];
   errors: string[];
   presentFields: string[];
+  headers: string[];
 } {
-  const lines = csvText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) {
+  const rows = parseCsvRows(csvText);
+  if (rows.length < 2) {
     return {
       events: [],
       errors: ['CSV must include a header row and at least one data row.'],
       presentFields: [],
+      headers: rows[0] ?? [],
     };
   }
 
-  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const idx = {
-    entity: headers.findIndex((h) =>
-      [
-        'entity_id',
-        'user_id',
-        'customer_id',
-        'entity',
-        'unit_id',
-        'asset_id',
-        'machine_id',
-        'engine_id',
-        'sensor_id',
-        'device_id',
-      ].includes(h)
-    ),
-    day: headers.findIndex((h) =>
-      ['timestamp_day', 'day', 't', 'timestamp', 'cycle', 'time_cycles', 'step', 'cycle_idx'].includes(h)
-    ),
-    actionId: headers.findIndex((h) => ['action_id', 'action', 'op_setting'].includes(h)),
-    actionLabel: headers.findIndex((h) =>
-      ['action_label', 'treatment', 'action_name', 'maintenance_action', 'regime'].includes(h)
-    ),
-    channel: headers.findIndex((h) =>
-      ['channel', 'source', 'sensor_channel', 'sensor_name', 'subsystem'].includes(h)
-    ),
-    spend: headers.findIndex((h) =>
-      [
-        'spend_amount',
-        'spend',
-        'amount',
-        'revenue',
-        'vibration',
-        'vibration_rms',
-        'rms_vibration',
-        'sensor_value',
-        'sensor_reading',
-        'temperature',
-        'pressure',
-        'signal_value',
-      ].includes(h)
-    ),
-    engagement: headers.findIndex((h) =>
-      ['engagement_score', 'engagement', 'utilization', 'health_index', 'health', 'degradation_index'].includes(h)
-    ),
-    reward: headers.findIndex((h) => ['reward', 'margin', 'r', 'uptime_reward', 'rul_margin'].includes(h)),
-    propensity: headers.findIndex((h) => ['propensity', 'mu', 'prob'].includes(h)),
-  };
+  const headers = rows[0].map((header) => header.replace(/^\uFEFF/, '').trim());
+  const inferred = inferDefaultCsvMapping(headers);
+  const idx: CsvColumnMapping = mappingOverride ?? inferred;
+  const validIndex = (index: number | undefined): index is number =>
+    index !== undefined && Number.isInteger(index) && index >= 0 && index < headers.length;
 
   const presentFields: string[] = [];
-  if (idx.entity >= 0) presentFields.push('entity_id');
-  if (idx.day >= 0) presentFields.push('timestamp_day');
-  if (idx.spend >= 0) presentFields.push('spend_amount');
-  if (idx.actionId >= 0) presentFields.push('action_id');
-  if (idx.actionLabel >= 0) presentFields.push('action_label');
-  if (idx.channel >= 0) presentFields.push('channel');
-  if (idx.engagement >= 0) presentFields.push('engagement_score');
-  if (idx.reward >= 0) presentFields.push('reward');
-  if (idx.propensity >= 0) presentFields.push('propensity');
+  if (validIndex(idx.entity)) presentFields.push('entity_id');
+  if (validIndex(idx.day)) presentFields.push('timestamp_day');
+  if (validIndex(idx.spend)) presentFields.push('spend_amount');
+  if (validIndex(idx.actionId)) presentFields.push('action_id');
+  if (validIndex(idx.actionLabel)) presentFields.push('action_label');
+  if (validIndex(idx.channel)) presentFields.push('channel');
+  if (validIndex(idx.engagement)) presentFields.push('engagement_score');
+  if (validIndex(idx.reward)) presentFields.push('reward');
+  if (validIndex(idx.propensity)) presentFields.push('propensity');
 
-  if (idx.entity === -1 || idx.day === -1 || idx.spend === -1) {
+  if (!validIndex(idx.entity) || !validIndex(idx.day) || !validIndex(idx.spend)) {
     return {
       events: [],
       errors: [
-        'Missing required columns: expected entity_id/unit_id, timestamp_day/cycle, and spend_amount/vibration/sensor_value.',
+        'Map a column to each required field: Entity ID, Timestamp, and Value.',
       ],
       presentFields,
+      headers,
+    };
+  }
+  if (new Set([idx.entity, idx.day, idx.spend]).size !== 3) {
+    return {
+      events: [],
+      errors: ['Entity ID, Timestamp, and Target / Value must use different columns.'],
+      presentFields,
+      headers,
     };
   }
 
   const rawParsed: RawEvent[] = [];
   const errors: string[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',').map((c) => c.trim());
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i];
     const entityId = cols[idx.entity];
     const timestampDay = Number(cols[idx.day]);
     const spendAmount = Number(cols[idx.spend]);
 
     if (!entityId || !Number.isFinite(timestampDay) || !Number.isFinite(spendAmount)) {
-      errors.push(`Row ${i + 1}: invalid entity_id, timestamp_day, or spend_amount.`);
+      errors.push(`Row ${i + 1}: invalid mapped entity, timestamp, or value.`);
       continue;
     }
 
-    const actionId = idx.actionId >= 0 ? Number(cols[idx.actionId]) || 0 : 0;
+    const actionId = validIndex(idx.actionId) ? Number(cols[idx.actionId]) || 0 : 0;
     const actionLabel =
-      idx.actionLabel >= 0 && cols[idx.actionLabel]
+      validIndex(idx.actionLabel) && cols[idx.actionLabel]
         ? cols[idx.actionLabel]
         : `Action ${actionId}`;
-    const channel = idx.channel >= 0 && cols[idx.channel] ? cols[idx.channel] : 'Default';
+    const channel =
+      validIndex(idx.channel) && cols[idx.channel] ? cols[idx.channel] : 'Default';
     const engagementScore =
-      idx.engagement >= 0 && Number.isFinite(Number(cols[idx.engagement]))
+      validIndex(idx.engagement) && Number.isFinite(Number(cols[idx.engagement]))
         ? Number(cols[idx.engagement])
         : 0.5;
     const reward =
-      idx.reward >= 0 && Number.isFinite(Number(cols[idx.reward]))
+      validIndex(idx.reward) && Number.isFinite(Number(cols[idx.reward]))
         ? Number(cols[idx.reward])
         : Math.round(spendAmount * 0.3 * 100) / 100;
     const propensity =
-      idx.propensity >= 0 && Number.isFinite(Number(cols[idx.propensity]))
+      validIndex(idx.propensity) && Number.isFinite(Number(cols[idx.propensity]))
         ? Math.min(1, Math.max(0.01, Number(cols[idx.propensity])))
         : 0.5;
 
@@ -3532,7 +3602,7 @@ export function parseCsvToEvents(csvText: string): {
     }
   }
 
-  return { events: finalEvents, errors, presentFields };
+  return { events: finalEvents, errors, presentFields, headers };
 }
 
 const CANONICAL_IMPORT_FIELDS = [

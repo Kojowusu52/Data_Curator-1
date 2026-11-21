@@ -17,6 +17,7 @@ export type WorkspaceTab =
   | 'rul_timeseries'
   | 'feature_engineering'
   | 'governance_repository'
+  | 'paper_orchestra'
   | 'audit_export';
 
 export interface RawEvent {

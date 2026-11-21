@@ -14,7 +14,10 @@ import {
 import { SAMPLE_CSV_TEMPLATE, SAMPLE_SENSOR_CSV_TEMPLATE } from '../data/presets';
 import {
   buildSampleMatBuffer,
+  CsvColumnMapping,
+  getCsvHeaders,
   getMatMappedFields,
+  inferDefaultCsvMapping,
   inferDefaultMatMapping,
   MatColumnMapping,
   matWorkspaceToEvents,
@@ -23,6 +26,7 @@ import {
   parseMatFileBuffer,
   validateImportedDatasetSchema,
 } from '../engine/curationEngine';
+import { parseMultipleDatasetFiles } from '../engine/importFiles';
 import { RawEvent, SchemaValidationReport } from '../types/curation';
 
 interface CsvImportModalProps {
@@ -37,6 +41,12 @@ interface CsvImportModalProps {
 
 type ImportFormat = 'csv' | 'mat';
 
+interface MultiFileImportResult {
+  events: RawEvent[];
+  fileNames: string[];
+  schemaReport: SchemaValidationReport;
+}
+
 export const CsvImportModal: React.FC<CsvImportModalProps> = ({
   isOpen,
   onClose,
@@ -44,6 +54,7 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
 }) => {
   const [format, setFormat] = useState<ImportFormat>('csv');
   const [csvText, setCsvText] = useState(SAMPLE_CSV_TEMPLATE);
+  const [csvMapping, setCsvMapping] = useState<CsvColumnMapping | null>(null);
   const [datasetTitle, setDatasetTitle] = useState('Custom Event Stream');
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -54,6 +65,10 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     sourceType: 'variables',
   });
   const [isParsingMat, setIsParsingMat] = useState(false);
+  const [isParsingFiles, setIsParsingFiles] = useState(false);
+  const [multiFileMode, setMultiFileMode] = useState(false);
+  const [multiFileResult, setMultiFileResult] =
+    useState<MultiFileImportResult | null>(null);
 
   const matPreview = useMemo(() => {
     if (!parsedMat) return null;
@@ -62,10 +77,14 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
 
   const csvPreview = useMemo(() => {
     if (format !== 'csv') return null;
-    return parseCsvToEvents(csvText);
-  }, [format, csvText]);
+    return parseCsvToEvents(
+      csvText,
+      csvMapping ?? inferDefaultCsvMapping(getCsvHeaders(csvText))
+    );
+  }, [format, csvText, csvMapping]);
 
   const activeSchemaReport = useMemo<SchemaValidationReport | null>(() => {
+    if (multiFileMode) return multiFileResult?.schemaReport ?? null;
     if (format === 'csv' && csvPreview) {
       return validateImportedDatasetSchema({
         presentFields: csvPreview.presentFields,
@@ -81,7 +100,15 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
       });
     }
     return null;
-  }, [format, csvPreview, parsedMat, matPreview, matMapping]);
+  }, [
+    format,
+    csvPreview,
+    parsedMat,
+    matPreview,
+    matMapping,
+    multiFileMode,
+    multiFileResult,
+  ]);
 
   const structVars = useMemo(
     () => parsedMat?.variables.filter((v) => v.value.kind === 'struct') ?? [],
@@ -126,6 +153,19 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     setIsParsingMat(true);
     setErrors([]);
     try {
+      const sample = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 4096));
+      const isText = !sample.includes(0);
+      const sampleText = isText ? new TextDecoder().decode(sample) : '';
+      if (isText && /[,;\t]/.test(sampleText) && /[\r\n]/.test(sampleText)) {
+        setParsedMat(null);
+        setMatFileName(null);
+        setCsvText(new TextDecoder().decode(buffer));
+        setCsvMapping(null);
+        setDatasetTitle(fileName.replace(/\.(csv|mat)$/i, ''));
+        setFormat('csv');
+        return;
+      }
+
       const workspace = await parseMatFileBuffer(buffer);
       if (workspace.variables.length === 0) {
         setParsedMat(null);
@@ -153,8 +193,39 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     }
   };
 
+  const handleMultipleFiles = async (files: File[]) => {
+    setMultiFileMode(true);
+    setMultiFileResult(null);
+    setErrors([]);
+    setIsParsingFiles(true);
+    try {
+      const result = await parseMultipleDatasetFiles(files);
+      setDatasetTitle(`Imported files (${files.length})`);
+      setMultiFileResult(result);
+    } catch (error) {
+      setErrors([
+        error instanceof Error
+          ? error.message
+          : 'Unable to prepare the selected files for import.',
+      ]);
+    } finally {
+      setIsParsingFiles(false);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    if (files.length > 1) {
+      void handleMultipleFiles(files);
+      return;
+    }
+
+    setMultiFileMode(false);
+    setMultiFileResult(null);
+    setErrors([]);
+    const file = files[0];
     if (!file) return;
     const isMat = file.name.toLowerCase().endsWith('.mat');
 
@@ -177,11 +248,11 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
       };
       reader.readAsText(file);
     }
-    // Reset input so re-selecting the same file works
-    e.target.value = '';
   };
 
   const handleLoadSampleMat = () => {
+    setMultiFileMode(false);
+    setMultiFileResult(null);
     const buffer = buildSampleMatBuffer();
     void loadMatArrayBuffer(buffer, 'stratum_sample_events.mat');
   };
@@ -241,6 +312,19 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
   };
 
   const handleApply = () => {
+    if (multiFileMode) {
+      if (!multiFileResult || isParsingFiles) return;
+      onImportEvents(
+        multiFileResult.events,
+        datasetTitle.trim() || `Imported files (${multiFileResult.fileNames.length})`,
+        multiFileResult.schemaReport
+      );
+      setMultiFileMode(false);
+      setMultiFileResult(null);
+      onClose();
+      return;
+    }
+
     if (format === 'mat') {
       if (!parsedMat || !matPreview) {
         setErrors([
@@ -303,11 +387,10 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
               id="csv-modal-title"
               className="text-base font-semibold text-slate-900"
             >
-              Import Behavioral or Sensor Telemetry Stream
+              Import a Training or Telemetry Dataset
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Accepts canonical logs (entity_id, timestamp_day, spend_amount) or sensor streams
-              (unit_id, cycle, vibration_rms/sensor_value, health_index, maintenance_action).
+              CSV columns can use any heading; map the entity, timestamp, and target/value columns after upload. MATLAB Level 4/5 files are also supported.
             </p>
           </div>
           <button
@@ -376,7 +459,7 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
             </div>
           </div>
 
-          {format === 'csv' ? (
+          {!multiFileMode && format === 'csv' ? (
             <>
               <div>
                 <label
@@ -390,11 +473,12 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
                   className="w-full px-3 py-2 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 cursor-pointer flex items-center gap-2"
                 >
                   <FileUp className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Choose .csv or .mat file</span>
+                  <span>Choose .csv or .mat file(s)</span>
                   <input
                     id="csv-file-upload"
                     type="file"
                     accept=".csv,.mat,text/csv"
+                    multiple
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -413,7 +497,10 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        setMultiFileMode(false);
+                        setMultiFileResult(null);
                         setCsvText(SAMPLE_CSV_TEMPLATE);
+                        setCsvMapping(null);
                         setDatasetTitle('Custom Event Stream');
                         setErrors([]);
                       }}
@@ -425,7 +512,10 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        setMultiFileMode(false);
+                        setMultiFileResult(null);
                         setCsvText(SAMPLE_SENSOR_CSV_TEMPLATE);
+                        setCsvMapping(null);
                         setDatasetTitle('Industrial Sensor Stream');
                         setErrors([]);
                       }}
@@ -439,12 +529,111 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
                   id="csv-raw-textarea"
                   rows={8}
                   value={csvText}
-                  onChange={(e) => setCsvText(e.target.value)}
+                  onChange={(e) => {
+                    setMultiFileMode(false);
+                    setMultiFileResult(null);
+                    if (
+                      getCsvHeaders(e.target.value).join('\u0000') !==
+                      getCsvHeaders(csvText).join('\u0000')
+                    ) {
+                      setCsvMapping(null);
+                    }
+                    setCsvText(e.target.value);
+                  }}
                   className="w-full px-3 py-2.5 font-mono text-xs bg-slate-50 border border-slate-200 rounded-md text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                 />
               </div>
+
+              {csvPreview && csvPreview.headers.length > 0 && (
+                <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-800">Map CSV columns</div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                      Column headings can be named anything. Choose which columns represent the entity, time/cycle, and target or sensor value; other fields are optional.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {(
+                      [
+                        ['entity', 'Entity ID *'],
+                        ['day', 'Timestamp / Cycle *'],
+                        ['spend', 'Target / Value *'],
+                      ] as const
+                    ).map(([key, label]) => {
+                      const selected =
+                        csvMapping ?? inferDefaultCsvMapping(csvPreview.headers);
+                      return (
+                        <label key={key} className="text-[11px] font-medium text-slate-600">
+                          {label}
+                          <select
+                            value={selected[key] ?? ''}
+                            onChange={(event) =>
+                              setCsvMapping({
+                                ...selected,
+                                [key]: Number(event.target.value),
+                              })
+                            }
+                            className="mt-1 w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                          >
+                            {csvPreview.headers.map((header, index) => (
+                              <option key={`${index}-${header}`} value={index}>
+                                {header || `Column ${index + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <details>
+                    <summary className="cursor-pointer text-[11px] font-medium text-slate-600">
+                      Map optional model fields
+                    </summary>
+                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {(
+                        [
+                          ['actionId', 'Action ID'],
+                          ['actionLabel', 'Action label'],
+                          ['channel', 'Channel'],
+                          ['engagement', 'Engagement'],
+                          ['reward', 'Reward'],
+                          ['propensity', 'Propensity'],
+                        ] as const
+                      ).map(([key, label]) => {
+                        const selected =
+                          csvMapping ?? inferDefaultCsvMapping(csvPreview.headers);
+                        return (
+                          <label key={key} className="text-[11px] font-medium text-slate-600">
+                            {label}
+                            <select
+                              value={selected[key] ?? ''}
+                              onChange={(event) =>
+                                setCsvMapping({
+                                  ...selected,
+                                  [key]:
+                                    event.target.value === ''
+                                      ? undefined
+                                      : Number(event.target.value),
+                                })
+                              }
+                              className="mt-1 w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                            >
+                              <option value="">-- Unmapped --</option>
+                              {csvPreview.headers.map((header, index) => (
+                                <option key={`${index}-${header}`} value={index}>
+                                  {header || `Column ${index + 1}`}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </details>
+                </div>
+              )}
             </>
-          ) : (
+          ) : !multiFileMode ? (
             <div className="space-y-4">
               {/* MAT Upload + Sample Controls */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-md space-y-3">
@@ -488,12 +677,13 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
                       ? 'Parsing MATLAB binary...'
                       : matFileName
                       ? `Loaded: ${matFileName} (click to replace)`
-                      : 'Choose local .mat file'}
+                      : 'Choose local .mat file(s)'}
                   </span>
                   <input
                     id="mat-file-upload"
                     type="file"
-                    accept=".mat"
+                    accept=".csv,.mat,text/csv"
+                    multiple
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -810,6 +1000,69 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
                 </>
               )}
             </div>
+          ) : null}
+
+          {multiFileMode && (
+            <div
+              role={isParsingFiles ? 'status' : 'region'}
+              aria-label="Multiple file import"
+              className={`rounded-md border p-3 text-xs ${
+                errors.length > 0
+                  ? 'border-red-200 bg-red-50 text-red-900'
+                  : 'border-blue-200 bg-blue-50 text-blue-900'
+              }`}
+            >
+              {isParsingFiles ? (
+                <div>Reading and merging selected files...</div>
+              ) : multiFileResult ? (
+                <>
+                  <div className="font-semibold">
+                    {multiFileResult.fileNames.length} files ready ·{' '}
+                    {multiFileResult.events.length.toLocaleString()} events ·{' '}
+                    {new Set(multiFileResult.events.map((event) => event.entityId)).size.toLocaleString()}{' '}
+                    entities
+                  </div>
+                  <p className="mt-1 text-[11px]">
+                    Each CSV or MAT file was mapped from its headers or variable names.
+                    The selected files will be combined into one dataset.
+                  </p>
+                  <ul className="mt-2 list-inside list-disc text-[11px]">
+                    {multiFileResult.fileNames.slice(0, 5).map((name, index) => (
+                      <li key={`${index}:${name}`} className="truncate">{name}</li>
+                    ))}
+                    {multiFileResult.fileNames.length > 5 && (
+                      <li>{multiFileResult.fileNames.length - 5} more files</li>
+                    )}
+                  </ul>
+                </>
+              ) : (
+                <div>Selected files could not be merged. Review the errors below and select them again.</div>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-blue-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-blue-800 hover:bg-blue-50">
+                  <FileUp className="h-3.5 w-3.5" />
+                  Choose files
+                  <input
+                    type="file"
+                    accept=".csv,.mat,text/csv"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMultiFileMode(false);
+                    setMultiFileResult(null);
+                    setErrors([]);
+                  }}
+                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel multiple-file import
+                </button>
+              </div>
+            </div>
           )}
 
           {activeSchemaReport && (
@@ -938,12 +1191,19 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
             type="button"
             onClick={handleApply}
             disabled={
-              format === 'mat' &&
-              (!parsedMat || !matPreview || matPreview.events.length === 0)
+              isParsingFiles ||
+              (multiFileMode
+                ? !multiFileResult
+                : format === 'mat' &&
+                  (!parsedMat || !matPreview || matPreview.events.length === 0))
             }
             className="px-4 py-2 text-xs font-medium text-white bg-blue-700 rounded-md hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Materialize Datasets
+            {isParsingFiles
+              ? 'Reading Files...'
+              : multiFileResult
+              ? `Import ${multiFileResult.fileNames.length} Files`
+              : 'Materialize Datasets'}
           </button>
         </div>
       </div>

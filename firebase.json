@@ -1,0 +1,16 @@
+{
+  "apphosting": [
+    {
+      "backendId": "stratum-curator",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "release",
+        "dist"
+      ]
+    }
+  ]
+}

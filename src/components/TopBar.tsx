@@ -42,6 +42,7 @@ const TAB_TITLES: Record<WorkspaceTab, string> = {
   governance_repository: 'Governance, VCS & Archive',
   nl_query: 'Natural Language Query',
   auto_docs: 'Auto Documentation Generator',
+  paper_orchestra: 'Paper Orchestra',
   ai_curator: 'AI Data Quality & Curator',
   audit_export: 'Validation & Export',
 };
@@ -148,26 +149,28 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span>Import CSV / MAT</span>
         </button>
 
-        <button
-          type="button"
-          onClick={onExportCurrent}
-          disabled={isExporting}
-          className="px-4 py-2 text-xs font-medium text-white bg-blue-700 rounded-md hover:bg-blue-800 disabled:opacity-75 disabled:cursor-wait transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-        >
-          {isExporting ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span className="font-mono tabular-nums">
-                Exporting {Math.round(exportProgress.progress)}%
-              </span>
-            </>
-          ) : (
-            <>
-              <Download className="w-3.5 h-3.5" />
-              <span>{exportLabel}</span>
-            </>
-          )}
-        </button>
+        {activeTab !== 'paper_orchestra' && (
+          <button
+            type="button"
+            onClick={onExportCurrent}
+            disabled={isExporting}
+            className="px-4 py-2 text-xs font-medium text-white bg-blue-700 rounded-md hover:bg-blue-800 disabled:opacity-75 disabled:cursor-wait transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span className="font-mono tabular-nums">
+                  Exporting {Math.round(exportProgress.progress)}%
+                </span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>{exportLabel}</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* TopBar bottom-edge progress indicator */}

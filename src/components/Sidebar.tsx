@@ -22,6 +22,7 @@ import {
   Activity,
   FlaskConical,
   Archive,
+  FileText,
 } from 'lucide-react';
 import { DatasetPreset, GlobalCurationConfig, WorkspaceTab } from '../types/curation';
 import { useAuth } from '../contexts/AuthContext';
@@ -132,6 +133,12 @@ const NAV_ITEMS: { id: WorkspaceTab; label: string; subtitle: string; icon: Reac
     label: 'Auto Documentation',
     subtitle: 'Model card & data dictionary',
     icon: BookOpen,
+  },
+  {
+    id: 'paper_orchestra',
+    label: 'Paper Orchestra',
+    subtitle: 'Research projects & drafts',
+    icon: FileText,
   },
   {
     id: 'ai_curator',

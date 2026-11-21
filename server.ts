@@ -202,6 +202,118 @@ async function startServer() {
     }
   });
 
+  app.post('/api/paper-assist', async (req, res) => {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      res.status(400).json({ error: 'A writing request is required.' });
+      return;
+    }
+
+    const body = req.body as {
+      instruction?: unknown;
+      projectTitle?: unknown;
+      researchQuestion?: unknown;
+      sectionTitle?: unknown;
+      sectionText?: unknown;
+      sources?: unknown;
+    };
+
+    const isText = (value: unknown): value is string => typeof value === 'string';
+    const {
+      instruction,
+      projectTitle,
+      researchQuestion,
+      sectionTitle,
+      sectionText,
+      sources,
+    } = body;
+
+    if (
+      !isText(instruction) ||
+      !instruction.trim() ||
+      !isText(projectTitle) ||
+      !isText(researchQuestion) ||
+      !isText(sectionTitle) ||
+      !isText(sectionText)
+    ) {
+      res.status(400).json({ error: 'A writing instruction and project section are required.' });
+      return;
+    }
+
+    if (
+      instruction.length > 3000 ||
+      projectTitle.length > 120 ||
+      researchQuestion.length > 3000 ||
+      sectionTitle.length > 120 ||
+      sectionText.length > 20000
+    ) {
+      res.status(400).json({ error: 'The writing request exceeds the supported length.' });
+      return;
+    }
+
+    if (sources !== undefined && !Array.isArray(sources)) {
+      res.status(400).json({ error: 'Source references must be a list.' });
+      return;
+    }
+    if (Array.isArray(sources) && sources.length > 30) {
+      res.status(400).json({ error: 'A maximum of 30 source references is supported.' });
+      return;
+    }
+    const sourceList = Array.isArray(sources) ? sources.slice(0, 30) : [];
+    if (
+      sourceList.some(
+        (source) =>
+          !source ||
+          typeof source !== 'object' ||
+          Array.isArray(source) ||
+          Object.values(source).some(
+            (value) => typeof value !== 'string' || value.length > 2000
+          )
+      )
+    ) {
+      res.status(400).json({ error: 'A source reference is invalid or too long.' });
+      return;
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      res.status(500).json({
+        error: 'Gemini API key is not configured on the server. Check Settings > Secrets.',
+      });
+      return;
+    }
+
+    const prompt = [
+      `Research project: ${projectTitle}`,
+      `Research question: ${researchQuestion || 'Not specified'}`,
+      `Current section: ${sectionTitle}`,
+      'Current section draft:',
+      sectionText || '(No draft text yet)',
+      'Available source metadata (not full source text):',
+      JSON.stringify(sourceList),
+      'User request:',
+      instruction.trim(),
+    ].join('\n\n');
+
+    try {
+      const result = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: prompt,
+        config: {
+          systemInstruction:
+            'You are a research-writing assistant. Help organize, outline, critique, or revise the supplied draft. Do not invent facts, findings, quotations, source contents, or citations. Source entries contain metadata only; do not imply you have read them. If evidence is missing, clearly label it as a question or evidence gap. Return only the requested writing suggestion.',
+        },
+      });
+      const suggestion = result.text?.trim();
+      if (!suggestion) {
+        res.status(502).json({ error: 'The writing assistant returned an empty suggestion.' });
+        return;
+      }
+      res.json({ suggestion });
+    } catch (error) {
+      console.error('Paper Orchestra assistance failed:', error);
+      res.status(502).json({ error: 'Unable to generate a writing suggestion right now.' });
+    }
+  });
+
   app.post('/api/explain-ltv', async (req, res) => {
     const body = req.body as {
       datasetName?: string;
